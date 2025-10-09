@@ -20,7 +20,7 @@ class MapScreen extends ConsumerWidget {
         backgroundColor: Colors.blueAccent,
         actions: [
           IconButton(
-            icon: const Icon(Icons.clear_all),
+            icon: const Icon(Icons.cleaning_services_rounded),
             tooltip: 'Clear Points',
             onPressed: mapNotifier.clearPoints,
           ),
@@ -86,13 +86,11 @@ class MapScreen extends ConsumerWidget {
             onTap: (_, latlng) => mapNotifier.selectPoint(latlng),
           ),
           children: [
-            // OpenStreetMap Tile Layer
             TileLayer(
               urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
               userAgentPackageName: 'com.example.car_route_app',
             ),
 
-            // Route Polyline Layer
             PolylineLayer(
               polylines: [
                 if (mapState.polyline.isNotEmpty)

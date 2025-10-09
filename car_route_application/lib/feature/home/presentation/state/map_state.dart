@@ -27,59 +27,41 @@ class MapState {
   }) {
     return MapState(
       origin: origin ?? this.origin,
-      destination: destination ?? this.destination,
+      destination: destination,
       polyline: polyline ?? this.polyline,
-      routeData: routeData ?? this.routeData,
+      routeData: routeData,
       isSelectingOrigin: isSelectingOrigin ?? this.isSelectingOrigin,
     );
   }
 }
 
-class MapNotifier extends StateNotifier<AsyncValue<MapState>> {
-  final RoutingService _routingService;
+class MapNotifier extends AsyncNotifier<MapState> {
+  @override
+  Future<MapState> build() async {
+    return MapState();
+  }
 
-  MapNotifier(this._routingService) : super(AsyncValue.data(MapState()));
+  void selectPoint(LatLng latLng) {
+    if (state.value == null) return;
 
-  void selectPoint(LatLng point) {
-    state.whenData((mapState) async {
-      LatLng? newOrigin = mapState.origin;
-      LatLng? newDestination = mapState.destination;
-      bool newIsSelectingOrigin = mapState.isSelectingOrigin;
+    final currentState = state.value!;
 
-      if (mapState.isSelectingOrigin || mapState.origin == null) {
-        newOrigin = point;
-        newDestination = null;
-        newIsSelectingOrigin = false;
-      } else {
-        newDestination = point;
-        newIsSelectingOrigin = true;
-      }
-
-      // Update state temporarily
+    if (currentState.isSelectingOrigin) {
       state = AsyncValue.data(
-        mapState.copyWith(
-          origin: newOrigin,
-          destination: newDestination,
+        currentState.copyWith(
+          origin: latLng,
+          destination: null,
           polyline: [],
           routeData: null,
-          isSelectingOrigin: newIsSelectingOrigin,
+          isSelectingOrigin: false,
         ),
       );
-
-      // Check if both points are set to calculate route
-      if (newOrigin != null && newDestination != null) {
-        // Check to prevent calculation if origin and destination are the same
-        if (newOrigin.latitude == newDestination.latitude &&
-            newOrigin.longitude == newDestination.longitude) {
-          state = AsyncValue.data(
-            state.value!.copyWith(isSelectingOrigin: true),
-          );
-          return;
-        }
-
-        await _calculateRoute(newOrigin, newDestination);
-      }
-    });
+    } else {
+      state = AsyncValue.data(
+        currentState.copyWith(destination: latLng, isSelectingOrigin: true),
+      );
+      _calculateRoute(currentState.origin!, latLng);
+    }
   }
 
   void clearPoints() {
@@ -87,27 +69,30 @@ class MapNotifier extends StateNotifier<AsyncValue<MapState>> {
   }
 
   Future<void> _calculateRoute(LatLng origin, LatLng destination) async {
-    state = AsyncValue<MapState>.loading().copyWithPrevious(state);
+    final routingService = RoutingService();
 
     try {
-      final (polyline, routeData) = await _routingService.getRoute(
-        origin,
-        destination,
-      );
+      state = AsyncValue<MapState>.loading().copyWithPrevious(state);
 
+      final data = await routingService.calculateRoute(origin, destination);
+
+      // Set successful data state
       state = AsyncValue.data(
-        state.value!.copyWith(polyline: polyline, routeData: routeData),
+        state.value!.copyWith(
+          polyline: data.polyline,
+          routeData: data,
+          destination: destination,
+          isSelectingOrigin: true,
+        ),
       );
     } catch (e, st) {
       state = AsyncValue<MapState>.error(e, st).copyWithPrevious(state);
+
+      state = AsyncValue.data(state.value!.copyWith(isSelectingOrigin: false));
     }
   }
 }
 
-final routingServiceProvider = Provider((ref) => RoutingService());
-final mapProvider = StateNotifierProvider<MapNotifier, AsyncValue<MapState>>((
-  ref,
-) {
-  final routingService = ref.watch(routingServiceProvider);
-  return MapNotifier(routingService);
+final mapProvider = AsyncNotifierProvider<MapNotifier, MapState>(() {
+  return MapNotifier();
 });

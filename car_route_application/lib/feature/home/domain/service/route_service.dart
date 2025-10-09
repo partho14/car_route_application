@@ -1,35 +1,38 @@
+import 'dart:convert';
 import 'package:car_route_application/feature/home/data/models/route_model.dart';
+import 'package:http/http.dart' as http;
 import 'package:latlong2/latlong.dart';
 
 class RoutingService {
-  Future<(List<LatLng> polyline, RouteData routeData)> getRoute(
-    LatLng origin,
-    LatLng destination,
-  ) async {
-    await Future.delayed(const Duration(seconds: 1));
+  static const String apiKey = 'AIzaSyCnzZrqOV67s2k76lLy4B0DPkihPyGZsbE';
+  static const String apiUrl =
+      'https://maps.googleapis.com/maps/api/directions/json';
 
-    // Calculate rough midpoint for a curved mock polyline
-    final midLat = (origin.latitude + destination.latitude) / 2;
-    final midLon = (origin.longitude + destination.longitude) / 2;
+  Future<RouteData> calculateRoute(LatLng origin, LatLng destination) async {
+    final originStr = '${origin.latitude},${origin.longitude}';
+    final destinationStr = '${destination.latitude},${destination.longitude}';
 
-    // Introduce a slight curve or deviation for a realistic look
-    final curveLat = midLat + (destination.latitude - midLat) * 0.1;
-    final curveLon = midLon + (destination.longitude - midLon) * 0.1;
-
-    final mockPolyline = [origin, LatLng(curveLat, curveLon), destination];
-
-    // Calculate a mock distance (using Haversine formula for rough estimation)
-    const distance = Distance();
-    final mockDistance = distance(origin, destination) / 1000; // in km
-
-    // Estimate time (e.g., assuming average speed of 50 km/h)
-    final mockTimeMinutes = (mockDistance / 50 * 60).round();
-
-    final mockRouteData = RouteData(
-      distanceKm: mockDistance,
-      timeMinutes: mockTimeMinutes,
+    final uri = Uri.parse(
+      '$apiUrl?origin=$originStr&destination=$destinationStr&mode=driving&key=$apiKey',
     );
 
-    return (mockPolyline, mockRouteData);
+    final response = await http.get(uri);
+
+    if (response.statusCode == 200) {
+      final json = jsonDecode(response.body);
+
+      final status = json['status'] as String;
+      if (status != 'OK') {
+        throw Exception(
+          'Google Maps API Status: $status. Message: ${json['error_message'] ?? 'Check API key or billing.'}',
+        );
+      }
+
+      return RouteData.fromGoogleMaps(json);
+    } else {
+      throw Exception(
+        'Failed to load route from server. Status code: ${response.statusCode}',
+      );
+    }
   }
 }
